@@ -1,0 +1,20 @@
+#!/usr/bin/perl
+
+use strict;
+
+our $src_ball = 'Python-3.2.tar.bz2';
+our $src_url = 'http://www.python.org/ftp/python/3.2';
+our $SRCDIR = 'Python-3.2';
+our $configure = './configure --prefix=/usr/local --enable-shared';
+our $make_install = 'make altinstall';
+our $FIN_MSG = "Finished baking python32; Installed at: /usr/bin/python32";
+
+### Pre-install command
+my @cmds = ('yum install sqlite-devel tcl-devel tk-devel -y');
+my $cmdsRef = \@cmds;
+pre_install($cmdsRef);
+
+un_pack();
+build();
+do_install();
+system("ln -s /usr/local/bin/python3.2 /usr/bin/python32 > /dev/null 2>&1");

@@ -1,0 +1,4 @@
+#!/usr/bin/perl
+
+our $FIN_MSG = "nano has been installed.";
+yum_install('nano');

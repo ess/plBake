@@ -1,0 +1,304 @@
+#!/usr/bin/perl
+##
+# plBake AUTHOR: Scott Sullivan (ssullivan@liquidweb.com)
+# LWBake AUTHOR: Dennis Walters
+# 
+# DESCRIPTION: Common methods that plBake recipes use.
+#
+
+use Term::ANSIColor;
+use POSIX qw(strftime);
+
+use vars qw($recipe);
+use vars qw($SRCDIR);
+use vars qw($src_ball);
+use vars qw($src_url);
+use vars qw($FIN_MSG);
+use vars qw($configure);
+use vars qw($make_install);
+
+
+#
+# Helper methods 
+###########################################################################################
+
+##
+# This method returns the path to php.ini
+#
+sub php_ini {
+	my $php_ini = `php -i | grep php.ini | awk 'BEGIN \{ FS = "=>" } \; { print \$2 }' | grep php.ini | sed 's/ //g'`;
+	chomp($php_ini);
+	return $php_ini;
+}
+
+##
+# This method is for the lulz.
+#
+sub lol {
+	print "Needs moar /scripts/easymurphy!\n";
+}
+
+
+#
+# Build methods
+###########################################################################################
+
+##
+# The "build" method is defined with the default values here to do a
+# build for more or less any properly packaged autotools-based source
+# project, which covers a LOAD of source-based packages.  If the recipe
+# specifies $configure, then that is used in place of stock './configure'.
+
+sub build {
+	my $stderr;
+	if ( $configure ) {
+		$stderr = `cd $BUILDPREF/$SRCDIR && $configure 2>&1 1>/dev/null`;
+	}
+	else {
+		$stderr = `cd $BUILDPREF/$SRCDIR && ./configure 2>&1 1>/dev/null`;
+	}
+	if ( $? != 0 ) {
+		die_log("./configure threw STDERR: $stderr");
+	}
+	$stderr = `cd $BUILDPREF/$SRCDIR && make 2>&1 1>/dev/null`;
+	if ( $? != 0 ) {
+		die_log("make threw STDERR $stderr");
+	}
+}
+
+
+#
+# Install methods
+###########################################################################################
+
+##
+# The "do_install" method is defined with the default values here to do a
+# build for more or less any properly packaged autotools-based source
+# project, which covers a LOAD of source-based packages. If $make_install is defined
+# in the recipe, that is used rather than the typical 'make install'.
+sub do_install {
+	my $stderr;
+	if ( $make_install ) {
+		$stderr = `cd $BUILDPREF/$SRCDIR && $make_install 2>&1 1>/dev/null`;
+		if ( $? != 0 ) {
+			die_log("make install threw error $stderr");
+		}
+	}
+	else {
+		$stderr = `cd $BUILDPREF/$SRCDIR && make install 2>&1 1>/dev/null`;
+		if ( $? != 0 ) {
+			die_log("make install threw error $stderr");
+		}
+	}
+}
+
+##
+# This method is used to install packages through yum.
+#
+sub yum_install {
+	my $package = $_[0];
+	my @pre_check = `rpm -qa |grep $package`;
+	my $stderr;
+	if ( scalar(@pre_check) >= 1 ) {
+		print color 'yellow'; print "[ ",POSIX::strftime("%m/%d/%Y %H:%M:%S ", localtime)  ,"] "; print "$package is already installed, skipping.\n"; print color 'reset';
+	}
+	else {
+		$stderr = `yum install -y $package 2>&1 1>/dev/null`;
+		if ( $? != 0 ) {
+			die_log("Failed to install $package with yum: $stderr");
+		}
+	}
+}
+
+#		        
+# Internal methods 
+###########################################################################################
+
+##
+# Downloads and unpacks a source tar ball.
+#
+sub un_pack {
+	my $tar_cmd;
+	if ( $src_ball =~ /.tar.bz2/ ) {
+		$tar_cmd = 'tar xjvf';
+	}
+	elsif ( $src_ball =~ /.tar.gz/ || $src_ball =~ /.tgz/ ) {
+		$tar_cmd = 'tar zxvf';
+	}
+	else {
+		die_log("plBake only supports bzip2 or gzip compression.");
+	}
+	my $stderr = `wget -O $BUILDPREF/$src_ball $src_url/$src_ball 2>&1 1>/dev/null`;
+	if ( $? != 0 ) {
+		die_log("Failed to download $src_url/$src_ball $stderr");
+	}
+	$stderr = `cd $BUILDPREF &> /dev/null && $tar_cmd $src_ball 2>&1 1>/dev/null`;
+	if ( $? != 0 ) {
+		die_log("Failed to extract $src_ball $stderr");
+	}
+}
+
+##
+# Die and log the error.
+#
+sub die_log {
+	my $msg = $_[0];
+	my $build_log = "$BUILDPREF/$recipe.log";
+	open(FILE,">>$build_log") || die("Cannot open $build_log");	
+	print FILE "$msg\n";
+	close(FILE);
+	print color 'red'; print "\n[ ",POSIX::strftime("%m/%d/%Y %H:%M:%S ", localtime)  ,"] "; print color 'reset'; print "plBake error: error baking $recipe. Check $build_log for details.\n";
+	exit(1);
+}
+
+##
+# Determine the URL to pull the recipe from.
+#
+sub gen_url {
+        my $recipe = $_[0];
+        my $url = $RECIPEURI.$recipe;
+        return $url;
+}
+
+##
+# Source the recipe so it inherits the plBake environment.
+# this is much the same idea like the remote url include option in PHP.
+#
+sub source_http {
+        my $url = $_[0];
+        my $content = get ($url);
+	if ( ! $content ) {
+	        die_log "plBake ERROR: Couldn't fetch recipe $url; is it a valid?\n";
+	}
+        my $recipe_work = "$recipe.tmp";
+        if ( ! -e "$recipe_work" ) {
+                system("touch $recipe_work");
+        }
+        open FILE, ">$recipe_work" or die $!;
+        print FILE "$content";
+        close(FILE);
+        do "$recipe_work";
+        unlink $recipe_work;
+}
+
+##
+# Display the finished message defined in the recipe to the user.
+#
+sub fin_msg {
+	if ( $FIN_MSG ) {
+		print color 'green'; print "[ ",POSIX::strftime("%m/%d/%Y %H:%M:%S ", localtime)  ,"] "; print color 'reset'; print "$FIN_MSG\n";
+	}
+}
+
+##
+# Installs any pre-reqs listed in the %SRCREQ array in the recipe.
+#
+sub bake_reqs {
+	my $SRCREQref = $_[0];	
+	for my $req( @{$SRCREQref} ) {
+		is_installed("depcheck","$req");
+	        my $req_url = gen_url($req);
+	        source_http("$req_url");
+        	## create the file so we know recipe is installed.
+        	system("touch $installed_dir/$req");
+		print color 'green'; print "[ ",POSIX::strftime("%m/%d/%Y %H:%M:%S ", localtime)  ,"] "; print color 'reset'; print "Dependency $req installed successfully.\n";
+	};
+}
+
+##
+# Performs first run setup if needed
+#
+sub first_run {
+	our $BUILDPREF = '/usr/local/src/plBake';
+	our $RECIPEURI='http://scripts.ssullivan.org/recipes/';		
+	our $installed_dir = "$BUILDPREF/.installed";
+	
+	if ( $< != 0 ) {
+		print color 'red'; print "Must be root to bake.\n"; print color 'reset';
+		exit(1);
+	}
+	print color 'bold blue';
+	if ( ! -d $BUILDPREF ) {
+		print "* Creating $BUILDPREF\n";
+		system("mkdir $BUILDPREF");
+	}
+	if ( ! -d $installed_dir ) {
+		print "* Creating $installed_dir\n";
+		system("mkdir $installed_dir");
+	}
+	print color 'reset';
+}
+
+##
+# Determines if the recipe is already installed or not.
+#
+sub is_installed {
+	my $arg = $_[0];
+	my $dep = $_[1];
+	if ( $arg eq 'depcheck' ) {
+		if ( -e "$installed_dir/$dep" ) {
+			print color 'green'; print "[ ",POSIX::strftime("%m/%d/%Y %H:%M:%S ", localtime)  ,"] "; print color 'reset'; print "Dependency $dep already installed.\n";		
+		}
+		else {
+			print color 'blue'; print "[ ",POSIX::strftime("%m/%d/%Y %H:%M:%S ", localtime)  ,"] "; print color 'reset'; print "Baking dependency $dep...\n";
+		}
+	}
+	else {
+		if ( -e "$installed_dir/$recipe" ) {
+			if ( ! $params{'--refried'} ) {
+				print "$recipe is served. Add --refried to force.\n";
+				exit;
+			}
+			elsif ( $params{'--refried'} ) {
+				print color 'blue'; print "[ ",POSIX::strftime("%m/%d/%Y %H:%M:%S ", localtime)  ,"] "; print color 'reset'; print "Refrying $recipe ... Better second time around?\n";
+			}
+		}
+	}
+}
+
+##
+# Show basic help
+#
+sub help {
+	print "
+./plBake RECIPE --- Install RECIPE
+./plBake RECIPE --refried --- Even though RECIPE is already installed, force a re-install\n\n";
+	exit;
+}
+
+##
+# Commands to run before we start baking the recipe.
+#
+sub pre_install {
+	my $cmdsRef = $_[0];
+	my $stderr;
+        for my $cmd( @{$cmdsRef} ) {
+	        $stderr = `$cmd 2>&1 1>/dev/null`;
+        	if ( $? != 0 ) {
+        	        die_log("Command failed ($cmd): $stderr");
+        	}
+	};
+}
+
+##
+# Flow control for plBake
+#
+sub main {
+	if ( $params{'--help'} ) {
+		help();
+	}
+	first_run();
+	is_installed();
+	pre_install();
+
+	# For some reason, pkgconfig doesn't appear to always use its standard
+        # search paths on our servers, so they're set here.
+        system("export PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/local/lib/pkgconfig");
+
+	print color 'dark blue'; print "[ ",POSIX::strftime("%m/%d/%Y %H:%M:%S ", localtime)  ,"] "; print color 'reset'; print "Baking $recipe ...\n";
+	my $url = gen_url($recipe);
+	source_http("$url");
+	## create the file so we know recipe is installed.
+	system("touch $installed_dir/$recipe");
+	fin_msg();
+}

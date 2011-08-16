@@ -1,0 +1,20 @@
+#!/usr/bin/perl
+
+use strict;
+
+our $src_ball = 'Python-2.5.6.tar.bz2';
+our $src_url = 'http://www.python.org/ftp/python/2.5.6';
+our $SRCDIR = 'Python-2.5.6';
+our $configure = './configure --prefix=/usr/local --enable-shared';
+our $make_install = 'make altinstall';
+our $FIN_MSG = "Finished baking python25; Installed at: /usr/bin/python25";
+
+### Pre-install command
+my @cmds = ('yum install sqlite-devel tcl-devel tk-devel -y');
+my $cmdsRef = \@cmds;
+pre_install($cmdsRef);
+
+un_pack();
+build();
+do_install();
+system("ln -s /usr/local/bin/python2.5 /usr/bin/python25 > /dev/null 2>&1");

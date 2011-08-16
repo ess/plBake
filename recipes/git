@@ -1,0 +1,12 @@
+#!/usr/bin/perl
+
+use strict;
+
+our $src_ball = 'git-1.7.6.tar.bz2';
+our $src_url = 'http://kernel.org/pub/software/scm/git';
+our $SRCDIR = 'git-1.7.6';
+our $FIN_MSG = "Finished baking git; enjoy.";
+
+un_pack();
+build();
+do_install();

@@ -1,0 +1,4 @@
+#!/usr/bin/perl
+
+our $FIN_MSG = "vim has been installed.";
+yum_install('vim-enhanced');

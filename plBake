@@ -1,0 +1,33 @@
+#!/usr/bin/perl
+###
+# plBake AUTHOR: Scott Sullivan (ssullivan@liquidweb.com)
+# LWBake AUTHOR: Dennis Walters
+#
+# DESCRIPTION: Provides base tools to do installs.
+#	       See plBake-functions. This is a perl take on
+#	       LWBake originally by Dennis Walters.
+
+use LWP::Simple;
+
+use strict;
+use warnings;
+
+if ( scalar(@ARGV) == 0 ) {
+	print "You need to specify a recipe to install.\n";
+	exit(1);
+}
+our @args;
+for my $arg (@ARGV) {
+	push(@args, $arg);
+};
+our %params = map { $_ => 1 } @args;
+our $recipe = $args[0];
+if ( ! -e 'plBake-functions' ) {
+	my $stderr = `wget http://scripts.ssullivan.org/plBake-functions 2>&1 1>/dev/null`;
+	if ( $? != 0 ) {	
+		print "FATAL: Couldn't fetch plBake-functions: $stderr \n";
+		exit(1);
+	}
+}
+do 'plBake-functions';
+main();
